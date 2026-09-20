@@ -33,6 +33,7 @@ sudo dnf install -y \
     mangohud \
     p7zip \
     p7zip-plugins \
+    steam-devices \
     vulkan-tools \
     wine \
     winetricks
@@ -45,6 +46,30 @@ else
         mesa-dri-drivers.i686 \
         mesa-vulkan-drivers.i686
 fi
+
+printf 'Configuring USB radio serial-port permissions...\n'
+serial_groups=()
+for serial_device in /dev/ttyUSB* /dev/ttyACM*; do
+    if [[ -e "${serial_device}" ]]; then
+        serial_group="$(stat -c '%G' "${serial_device}")"
+        if [[ "${serial_group}" != "root" ]] && getent group "${serial_group}" >/dev/null 2>&1; then
+            if [[ ! " ${serial_groups[*]} " =~ " ${serial_group} " ]]; then
+                serial_groups+=("${serial_group}")
+            fi
+        fi
+    fi
+done
+
+# Fedora normally assigns USB serial devices to dialout. Use it when the
+# radio is not connected yet, and prefer the detected device group otherwise.
+if [[ "${#serial_groups[@]}" -eq 0 ]] && getent group dialout >/dev/null 2>&1; then
+    serial_groups+=(dialout)
+fi
+
+for serial_group in "${serial_groups[@]}"; do
+    sudo usermod --append --groups "${serial_group}" "${USER}"
+    printf 'Added %s to the %s group.\n' "${USER}" "${serial_group}"
+done
 
 printf 'Installing Brave Origin Nightly...\n'
 curl -fsS https://dl.brave.com/install.sh | FLAVOR=origin CHANNEL=nightly sh
@@ -88,4 +113,4 @@ else
     printf 'Enabled=false\n' >> "${config_file}"
 fi
 
-printf '\nSetup complete. Log out and back in, or restart KDE, for the wallet setting to fully take effect.\n'
+printf '\nSetup complete. Log out and back in, or restart KDE, for the wallet setting and serial-port permissions to fully take effect.\n'
